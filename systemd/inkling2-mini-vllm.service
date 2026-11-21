@@ -1,0 +1,19 @@
+[Unit]
+Description=Inkling-2-Mini vLLM + DSpark Inference Server (DGX Spark)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/recipes/inkling-2-mini-vllm-dgx-spark
+Environment=HF_CACHE_DIR=%h/.cache/huggingface
+ExecStartPre=-/usr/bin/docker compose down
+ExecStart=/usr/bin/docker compose up --remove-orphans
+ExecStop=/usr/bin/docker compose down
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=600
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

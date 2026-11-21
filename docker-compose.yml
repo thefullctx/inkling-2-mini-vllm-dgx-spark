@@ -1,0 +1,40 @@
+services:
+  inkling2-mini-vllm:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:inkling-2-mini}
+    container_name: inkling2-mini-vllm
+    restart: unless-stopped
+    privileged: true
+    ipc: host
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    volumes:
+      - "${HF_CACHE_DIR:-~/.cache/huggingface}:/root/.cache/huggingface"
+    environment:
+      - HF_HUB_DISABLE_XET=1
+      - HF_TOKEN=${HF_TOKEN:-}
+    command:
+      - ${MODEL_ID:-thinkingmachines/Inkling-2-Mini}
+      - --host
+      - "${HOST:-0.0.0.0}"
+      - --port
+      - "${PORT:-8000}"
+      - --tensor-parallel-size
+      - "1"
+      - --max-model-len
+      - "${VLLM_MAX_MODEL_LEN:-262144}"
+      - --gpu-memory-utilization
+      - "${VLLM_GPU_MEM_UTIL:-0.85}"
+      - --reasoning-parser
+      - inkling
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - inkling
+      - --speculative-config
+      - '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
