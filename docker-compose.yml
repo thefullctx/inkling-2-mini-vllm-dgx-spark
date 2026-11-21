@@ -2,9 +2,14 @@ services:
   inkling2-mini-vllm:
     image: ${VLLM_IMAGE:-vllm/vllm-openai:inkling-2-mini}
     container_name: inkling2-mini-vllm
+    pull_policy: if_not_present
     restart: unless-stopped
+    stop_grace_period: 15s
     privileged: true
     ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     volumes:
@@ -12,6 +17,7 @@ services:
     environment:
       - HF_HUB_DISABLE_XET=1
       - HF_TOKEN=${HF_TOKEN:-}
+      - VLLM_API_KEY=${API_KEY:-}
     command:
       - ${MODEL_ID:-thinkingmachines/Inkling-2-Mini}
       - --host
@@ -31,6 +37,12 @@ services:
       - inkling
       - --speculative-config
       - '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${PORT:-8000}/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 480s
     deploy:
       resources:
         reservations:

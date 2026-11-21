@@ -81,3 +81,23 @@ loginctl enable-linger "$USER"
 ```bash
 python3 benchmarks/bench.py --label vllm-dspark
 ```
+
+---
+
+## Unified Memory Budget (1× DGX Spark — 121.6 GiB Usable)
+
+Measured live on `NVIDIA GB10` (`--gpu-memory-utilization 0.85`, `--max-model-len 262144`):
+
+| Component | Footprint |
+| :--- | :---: |
+| Main weights + DSpark draft head + KV cache + CUDA graphs & OS | ~105.5 GiB |
+| **Free Headroom** | **~16.1 GiB** |
+
+*(Lower `VLLM_GPU_MEM_UTIL` to `0.70`–`0.75` in `.env` if you run other heavy local services alongside vLLM.)*
+
+## Helper Scripts & Security
+
+* `./status.sh` — Check container health and `/v1/models`
+* `./logs.sh` — Tail live vLLM logs
+* Inline overrides work without editing `.env` (e.g. `PORT=8001 ./start.sh`)
+* Set `API_KEY=your-secret` or `HOST=127.0.0.1` in `.env` if you don't want an unauthenticated `0.0.0.0` bind.
