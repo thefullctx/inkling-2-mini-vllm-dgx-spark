@@ -5,19 +5,25 @@ runtime: vllm
 container: vllm/vllm-openai:inkling-2-mini
 
 metadata:
-  description: "Thinking Machines Inkling-2-Mini (NVFP4/MXFP8) with DSpark speculative decoding on a single NVIDIA DGX Spark using vLLM"
+  description: "Thinking Machines Inkling-2-Mini (NVFP4/MXFP8) with vLLM Humming MoE, eager safetensors load & DSpark on a single NVIDIA DGX Spark"
 
 defaults:
   port: 8000
   host: 0.0.0.0
   tensor_parallel: 1
-  gpu_memory_utilization: 0.85
+  gpu_memory_utilization: 0.65
   max_model_len: 262144
 
 env:
   HF_HUB_DISABLE_XET: "1"
 
 extra_args:
+  - --moe-backend
+  - humming
+  - --safetensors-load-strategy
+  - eager
+  - --max-num-seqs
+  - "8"
   - --reasoning-parser
   - inkling
   - --enable-auto-tool-choice

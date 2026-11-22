@@ -14,6 +14,7 @@ services:
       - "${PORT:-8000}:${PORT:-8000}"
     volumes:
       - "${HF_CACHE_DIR:-~/.cache/huggingface}:/root/.cache/huggingface"
+      - "${VLLM_CACHE_DIR:-~/.cache/vllm}:/root/.cache/vllm"
     environment:
       - HF_HUB_DISABLE_XET=1
       - HF_TOKEN=${HF_TOKEN:-}
@@ -26,10 +27,16 @@ services:
       - "${PORT:-8000}"
       - --tensor-parallel-size
       - "1"
+      - --moe-backend
+      - "${VLLM_MOE_BACKEND:-humming}"
+      - --safetensors-load-strategy
+      - eager
       - --max-model-len
       - "${VLLM_MAX_MODEL_LEN:-262144}"
+      - --max-num-seqs
+      - "${VLLM_MAX_NUM_SEQS:-8}"
       - --gpu-memory-utilization
-      - "${VLLM_GPU_MEM_UTIL:-0.85}"
+      - "${VLLM_GPU_MEM_UTIL:-0.65}"
       - --reasoning-parser
       - inkling
       - --enable-auto-tool-choice
@@ -42,7 +49,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 480s
+      start_period: 300s
     deploy:
       resources:
         reservations:

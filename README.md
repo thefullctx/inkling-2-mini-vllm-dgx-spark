@@ -1,37 +1,37 @@
-# Inkling-2-Mini on a Single NVIDIA DGX Spark (vLLM + DSpark)
+# Inkling-2-Mini on a Single NVIDIA DGX Spark (vLLM + Humming MoE + DSpark)
 
-Single-node recipe for running **[thinkingmachines/Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)** natively in **NVFP4 / MXFP8** with **DSpark speculative decoding** on a **single NVIDIA DGX Spark** using **vLLM**.
+Tuned single-node recipe for running **[thinkingmachines/Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)** natively in **NVFP4 / MXFP8** with **vLLM's Humming MoE backend**, **eager safetensors loading**, and **DSpark speculative decoding** on a **single NVIDIA DGX Spark**.
 
-> **When to pick vLLM vs. SGLang on DGX Spark:** In our head-to-head DGX Spark benchmark, **vLLM** edged out SGLang by **+5.5% on short-context `c=1` decode (52.3 tok/s)** and **+3.7% on `c=4` concurrency (91.2 tok/s)**, while **SGLang** won overall on long-context prefill (**2.06× faster**), long-context decode (**+17.4%**), and lower unified RAM usage.
-> Looking for our overall winner (SGLang)? See [inkling-2-mini-sglang-dgx-spark](https://github.com/thefullctx/inkling-2-mini-sglang-dgx-spark).
+> **What's new in the tuned vLLM recipe:** Adding `--moe-backend humming`, `--safetensors-load-strategy eager`, persistent `~/.cache/vllm`, and `--gpu-memory-utilization 0.65` delivered **2.2× faster cold startup (`167s` vs `~360s`)**, **+7.9% `c=4` aggregate throughput (`98.41 tok/s`)**, **+8.6% faster deterministic `c=1` decode than SGLang (`49.03` vs `45.16 tok/s`)**, and **20.5 GiB lower unified RAM usage (`85.0 GiB` vs `105.5 GiB`)**.
+> Looking for our SGLang recipe (best for 15K+ long-context prefill/decode & 1M context)? See [inkling-2-mini-sglang-dgx-spark](https://github.com/thefullctx/inkling-2-mini-sglang-dgx-spark).
 
 ---
 
 ## Hardware & Model Overview
 
 * **Hardware:** 1× NVIDIA DGX Spark (128 GB unified LPDDR5X, Blackwell native FP4)
-* **Model:** `thinkingmachines/Inkling-2-Mini` — 26.4B total / 3.4B active (~5.4B effective across 3 looped middle-layer passes), multimodal (text + image in, text out), capped at 262K context on single DGX Spark, bundled DSpark speculator
-* **Precision:** Native mixed **NVFP4 + MXFP8** (~20 GB checkpoint, zero requantization)
+* **Model:** `thinkingmachines/Inkling-2-Mini` — 26.4B total / 3.4B active (~5.4B effective across 3 looped middle-layer passes), multimodal (text + image in, text out), 262K context on single DGX Spark, bundled DSpark speculator
+* **Precision:** Native mixed **NVFP4** (layers 0–19 experts) + **MXFP8** (layers 20–23 experts) + **BF16** (attention, vision, draft head & KV cache)
 * **Image:** `vllm/vllm-openai:inkling-2-mini` (`linux/arm64` native)
 
 ---
 
-## Head-to-Head DGX Spark Benchmarks (vLLM vs. SGLang)
+## DGX Spark Benchmarks: Stock vLLM vs. Tuned vLLM (Humming + Eager) vs. Tuned SGLang
 
 Measured on a single NVIDIA DGX Spark (`driver 580.178.04`, 121.6 GiB usable unified RAM) using [`benchmarks/bench.py`](benchmarks/bench.py) over `/v1/chat/completions`:
 
-| Metric | **vLLM + DSpark (this repo)** | SGLang + DSpark | Winner |
+| Metric | Stock vLLM (`0.85` util) | **Tuned vLLM (`humming` + `eager`, `0.65`)** | Tuned SGLang (`page=16` + Fused MoE) |
 | :--- | :---: | :---: | :---: |
-| **Smoke Tests** (Chat/Reasoning, Tools, Vision) | ✅ / ✅ / ✅ | ✅ / ✅ / ✅ | Tie |
-| **`c=1` Short Decode (3-run avg)** | **52.30 tok/s** *(peak 62.8)* | 49.56 tok/s | **vLLM (+5.5%)** |
-| **`c=1` Short TTFT** | **0.194s** | 0.221s | **vLLM** |
-| **`c=1` 15.6K-Context Cold Prefill** | 9.23s *(~1,690 tok/s)* | **4.48s** *(~3,480 tok/s)* | SGLang (2.06×) |
-| **`c=1` 15.6K-Context Warm Prefix TTFT** | **0.227s** | 0.254s | **vLLM** *(both ~0.2s)* |
-| **`c=1` 15.6K-Context Decode** | 38.43 tok/s | **45.12 tok/s** | SGLang (+17.4%) |
-| **`c=4` Concurrent Aggregate** | **91.17 tok/s** | 87.88 tok/s | **vLLM (+3.7%)** |
-| **Unified RAM Used** | 105.5 GiB *(16.1 GiB free)* | **65.2 GiB** *(56.4 GiB free)* | SGLang |
+| **Smoke Tests** (Reasoning, Tools, Vision) | ✅ / ✅ / ✅ | ✅ / ✅ / ✅ | ✅ / ✅ / ✅ |
+| **Cold Startup Time** | ~360s | **167s (2.2× faster)** *(~45s warm)* | ~372s |
+| **`c=1` Short Decode (`temp=0.0`)** | — | **49.03 tok/s** *(peak 58.4)* | 45.16 tok/s |
+| **`c=1` Short Decode (`temp=0.6`)** | **52.30 tok/s** | 49.96 tok/s *(peak 57.7)* | 49.56 tok/s |
+| **15.6K Warm Prefix TTFT** | 0.23s | **0.21s** | **0.21s** |
+| **15.6K Long-Context Decode** | 38.43 tok/s | 40.42 tok/s *(+5.2% vs stock)* | **47.75 tok/s** |
+| **`c=4` Concurrent Aggregate (`temp=0.6`)** | 91.17 tok/s | **98.41 tok/s (+7.9%!)** | 90.44–94.17 tok/s |
+| **Unified RAM Used** | 105.5 GiB *(16.1 GiB free)* | **85.0 GiB (-20.5 GiB saved!)** | **62.8 GiB** *(~59 GiB free)* |
 
-Raw JSON outputs are included in [`benchmarks/results/`](benchmarks/results/).
+Raw JSON outputs are in [`benchmarks/results/`](benchmarks/results/).
 
 ---
 
@@ -46,15 +46,11 @@ cp .env.example .env
 ./start.sh
 ```
 
-Follow startup logs:
+Check status / logs / stop:
 
 ```bash
-docker logs -f inkling2-mini-vllm
-```
-
-Stop the server:
-
-```bash
+./status.sh
+./logs.sh
 ./stop.sh
 ```
 
@@ -76,24 +72,14 @@ loginctl enable-linger "$USER"
 
 ---
 
-## Verify & Benchmark
-
-```bash
-python3 benchmarks/bench.py --label vllm-dspark
-```
-
----
-
 ## Unified Memory Budget (1× DGX Spark — 121.6 GiB Usable)
 
-Measured live on `NVIDIA GB10` (`--gpu-memory-utilization 0.85`, `--max-model-len 262144`):
+Measured live on `NVIDIA GB10` (`--gpu-memory-utilization 0.65`, `--max-model-len 262144`):
 
 | Component | Footprint |
 | :--- | :---: |
-| Main weights + DSpark draft head + KV cache + CUDA graphs & OS | ~105.5 GiB |
-| **Free Headroom** | **~16.1 GiB** |
-
-*(Lower `VLLM_GPU_MEM_UTIL` to `0.70`–`0.75` in `.env` if you run other heavy local services alongside vLLM.)*
+| Main weights + DSpark draft head + KV cache + CUDA graphs & OS | ~85.0 GiB |
+| **Free Headroom** | **~36.6 GiB** |
 
 ## Helper Scripts & Security
 
